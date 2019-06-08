@@ -75,7 +75,7 @@ class Client:
 
         self.check_and_fill_entrance()
         # step1: find_successor(hashed_value_of_file)
-        result, successor_addr = self.find_successor(hashed_value_of_file)
+        result, successor_addr, path_len = self.find_successor(hashed_value_of_file)
         if result == -1:
             return -1
 
@@ -102,9 +102,9 @@ class Client:
 
         self.check_and_fill_entrance()
         # step1: find_successor(hashed_value_of_file)
-        result, successor_addr = self.find_successor(hashed_value_of_file)
+        result, successor_addr, path_len = self.find_successor(hashed_value_of_file)
         if result == -1:
-            return -1, list()
+            return -1, list(), path_len
 
         # step2: get addr_list from Chord
         with grpc.insecure_channel(successor_addr) as channel:
@@ -115,14 +115,14 @@ class Client:
                 response = stub.get(req, timeout=20)
             except Exception:
                 print("RPC failed from get()")
-                return -1, list()
+                return -1, list(), path_len
         if response.result == -1:
-            return -1, list()
+            return -1, list(), path_len
 
         addr_list = list()
         for addr in response.pairs[0].addrs:
             addr_list.append(addr)
-        return 0, addr_list
+        return 0, addr_list, path_len
 
     def find_successor(self, hashed_value_of_file):
         # return: {int result: -1 for failed, 0 for succeeded; string successor_addr}
@@ -137,7 +137,7 @@ class Client:
             except Exception:
                 print("RPC failed from find_successor()")
                 return -1, ''
-        return 0, response.addr
+        return 0, response.addr, response.path_len
 
     def check_and_fill_entrance(self):
         if self.entrance_addr:
@@ -223,13 +223,15 @@ class Client:
         self.entrance_addr = response.entrance_addr
 
         # step2: Client contacts the entrance, get a list of fileholder_addr
-        result, addr_list = self.get(hashed_value_of_file=hashed_value_of_file)
+        result, addr_list, path_len = self.get(hashed_value_of_file=hashed_value_of_file)
         # response: {int32 result: -1 for failed, 0 for succeeded; repeated Address addr_list}
 
         if result == -1:
             print('Failed while getting fileholder\'s addresses from Chord')
-            return
-        print(addr_list)
+            return -1
+        addr_list = list()
+        for addr in addr_list:
+            addr_list.append(addr)
 
         # Client picks one addr randomly and contacts it to download.
         # This client can also register in Chord as a fileholder
@@ -244,10 +246,10 @@ class Client:
             except Exception as e:
                 print("RPC failed from download() position 2")
                 print(e)
-                return
+                return -1
         if response.result == -1:
             print('File not found')
-            return
+            return -1
         file = response.file
 
         # write the file into local file
@@ -256,7 +258,7 @@ class Client:
                 f.write(file)
         except Exception as e:
             print('Failed while storing the downloaded file to local')
-            return
+            return path_len
 
         print('Download succeeded!')
 
